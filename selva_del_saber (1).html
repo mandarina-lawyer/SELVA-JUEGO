@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Selva del Saber</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; image-rendering: pixelated; }
+
+body {
+  background: #0a1a0a;
+  font-family: 'Press Start 2P', monospace;
+  overflow: hidden;
+  width: 100vw; height: 100vh;
+  display: flex; flex-direction: column;
+}
+
+/* ══════════════════════════════════════
+   TOP HUD BAR
+══════════════════════════════════════ */
+#hud {
+  background: #0d1a0d;
+  border-bottom: 3px solid #2d5a2d;
+  padding: 8px 16px;
+  display: flex; align-items: center; gap: 16px;
+  flex-shrink: 0; z-index: 10;
+  position: relative;
+}
+#hud::after {
+  content: '';
+  position: absolute; bottom: -6px; left: 0; right: 0; height: 3px;
+  background: #1a3a1a;
+}
+.hud-title { font-size: 11px; color: #7ec850; letter-spacing: 2px; text-shadow: 2px 2px 0 #1a3a1a; }
+.hud-sep { color: #2d5a2d; }
+.hud-item { display: flex; align-items: center; gap: 6px; }
+.hud-label { font-size: 7px; color: #4a8a4a; }
+.hud-val { font-size: 11px; color: #f5c518; }
+.hearts { display: flex; gap: 3px; }
+.heart { font-size: 13px; transition: all 0.2s; }
+.heart.dead { filter: grayscale(1); opacity: 0.3; transform: scale(0.8); }
+#xp-bar { flex: 1; max-width: 180px; }
+#xp-bg {
+  height: 10px; background: #0a100a; border: 2px solid #2d5a2d;
+  position: relative; overflow: hidden;
+}
+#xp-fill {
+  height: 100%; width: 0%; background: #4caf50;
+  transition: width 0.6s ease;
+}
+.progress-text { font-size: 7px; color: #4a8a4a; margin-top: 2px; text-align: center; }
+
+/* ══════════════════════════════════════
+   JUNGLE MAP
+══════════════════════════════════════ */
+#map-container {
+  flex: 1; position: relative; overflow: hidden;
+  background: #1a3a1a;
+}
+
+#jungle-bg {
+  width: 100%; height: 100%;
+  position: absolute; top: 0; left: 0;
+}
+
+/* Pixel scanlines overlay */
+#map-container::before {
+  content: '';
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg, transparent 0px, transparent 2px,
+    rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px
+  );
+}
+
+/* Zone hotspot markers */
+.zone-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  z-index: 5;
+  transition: transform 0.15s;
+}
+.zone-marker:hover { transform: translate(-50%, -50%) scale(1.15); }
+.zone-marker:hover .zone-dot { box-shadow: 0 0 0 4px rgba(245,197,24,0.5), 0 0 0 8px rgba(245,197,24,0.2); }
+
+.zone-dot {
+  width: 44px; height: 44px;
+  border: 4px solid #f5c518;
+  background: #1a1a0a;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  position: relative;
+  animation: markerPulse 2s ease-in-out infinite;
+  box-shadow: 0 0 0 2px rgba(245,197,24,0.3);
+}
+.zone-dot::before {
+  content: '';
+  position: absolute; inset: -2px;
+  border: 2px solid rgba(245,197,24,0.4);
+  animation: markerRing 2s ease-in-out infinite;
+}
+.zone-dot.completed {
+  border-color: #7ec850;
+  background: #0d2a0d;
+  animation: none;
+  box-shadow: 0 0 12px rgba(126,200,80,0.5);
+}
+.zone-dot.locked {
+  border-color: #4a4a4a;
+  background: #0d0d0d;
+  filter: grayscale(0.8);
+  animation: none;
+  cursor: not-allowed;
+}
+.zone-label {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%; transform: translateX(-50%);
+  background: rgba(10,26,10,0.92);
+  border: 2px solid #2d5a2d;
+  padding: 4px 8px;
+  font-size: 6px;
+  color: #7ec850;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.zone-num {
+  position: absolute;
+  top: -8px; right: -8px;
+  background: #f5c518;
+  color: #1a1a0a;
+  font-size: 7px;
+  width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Path between zones */
+.zone-path {
+  position: absolute;
+  z-index: 3; pointer-events: none;
+}
+
+/* ══════════════════════════════════════
+   MODAL
+══════════════════════════════════════ */
+#modal-bg {
+  display: none;
+  position: fixed; inset: 0; z-index: 20;
+  background: rgba(0,0,0,0.85);
+  align-items: center; justify-content: center;
+}
+#modal-bg.open { display: flex; }
+
+#modal {
+  background: #0d1a0d;
+  border: 4px solid #2d5a2d;
+  width: min(860px, 96vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 0 0 2px #1a3a1a, 8px 8px 0 #050f05;
+}
+
+#modal-header {
+  background: #0a1208;
+  border-bottom: 3px solid #2d5a2d;
+  padding: 12px 16px;
+  display: flex; align-items: center; gap: 12px;
+}
+#modal-icon { font-size: 26px; }
+#modal-title { font-size: 10px; color: #f5c518; flex: 1; line-height: 1.6; }
+#modal-subtitle { font-size: 7px; color: #4caf50; margin-top: 4px; }
+#modal-close {
+  background: #3a0a0a; border: 3px solid #8b3333; color: #e05252;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px; padding: 6px 10px; cursor: pointer;
+}
+#modal-close:hover { background: #5a1a1a; }
+
+#modal-body { padding: 16px; }
+
+#modal-objective {
+  background: #0a1208; border-left: 4px solid #4caf50;
+  padding: 10px 14px; margin-bottom: 16px;
+  font-size: 8px; color: #a5d6a7; line-height: 1.8;
+}
+
+/* ══════════════════════════════════════
+   GAME ELEMENTS
+══════════════════════════════════════ */
+
+/* -- Source Cards (Zone 1) -- */
+.source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px; margin-bottom: 14px;
+}
+.src-card {
+  background: #050f05; border: 2px solid #1a3a1a;
+  padding: 12px; cursor: default;
+  transition: border-color 0.15s;
+}
+.src-card .src-year { font-size: 8px; color: #f5c518; margin-bottom: 6px; }
+.src-card .src-title { font-size: 9px; color: #c8e6c9; line-height: 1.7; margin-bottom: 10px; }
+.src-btns { display: flex; gap: 6px; }
+.src-btn {
+  flex: 1; font-family: 'Press Start 2P', monospace;
+  font-size: 7px; padding: 6px 4px; cursor: pointer; border: 2px solid;
+  transition: all 0.1s;
+}
+.src-btn.yes-btn { background: #0a2a0a; border-color: #4caf50; color: #7ec850; }
+.src-btn.yes-btn:hover, .src-btn.yes-btn.active { background: #1a4a1a; border-color: #7ec850; }
+.src-btn.no-btn { background: #2a0a0a; border-color: #8b3333; color: #e05252; }
+.src-btn.no-btn:hover, .src-btn.no-btn.active { background: #4a1a1a; }
+.src-card.correct-card { border-color: #7ec850; background: #0a2a0a; }
+.src-card.wrong-card { border-color: #e05252; background: #2a0a0a; animation: shake 0.3s; }
+
+/* -- Classify (Zone 2 & 3) -- */
+.items-row {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+  padding: 10px; background: #050f05; border: 2px solid #1a3a1a;
+}
+.drag-item {
+  background: #0d1a0d; border: 2px solid #2d5a2d;
+  padding: 8px 12px; font-size: 9px; color: #c8e6c9;
+  cursor: pointer; transition: all 0.15s; line-height: 1.6;
+  user-select: none;
+}
+.drag-item:hover:not(.placed) { border-color: #f5c518; color: #f5c518; }
+.drag-item.selected { border-color: #f5c518; background: #1a1a00; color: #f5c518; }
+.drag-item.placed { opacity: 0.35; border-style: dashed; cursor: default; }
+
+.cats-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.cat-box {
+  flex: 1; min-width: 140px;
+  background: #050f05; border: 2px dashed #2d5a2d;
+  padding: 10px; min-height: 90px; cursor: pointer;
+  transition: border-color 0.15s;
+}
+.cat-box:hover { border-color: #4caf50; }
+.cat-box h4 { font-size: 8px; color: #4fc3f7; margin-bottom: 8px; text-align: center; }
+.cat-tag {
+  background: #1a3a1a; border: 2px solid #2d5a2d;
+  padding: 4px 8px; font-size: 8px; color: #a5d6a7;
+  margin-bottom: 4px; cursor: pointer; line-height: 1.6;
+}
+.cat-tag:hover { border-color: #e05252; }
+
+/* -- Match (Zone 4) -- */
+.match-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.match-col-title { font-size: 8px; color: #4fc3f7; margin-bottom: 8px; text-align: center; }
+.match-chip {
+  background: #050f05; border: 2px solid #2d5a2d;
+  padding: 10px; font-size: 9px; color: #c8e6c9;
+  margin-bottom: 6px; cursor: pointer; line-height: 1.6;
+  transition: all 0.15s; min-height: 46px;
+  display: flex; align-items: center;
+}
+.match-chip:hover:not(.matched) { border-color: #f5c518; }
+.match-chip.selected { border-color: #f5c518; background: #1a1a00; }
+.match-chip.matched { border-color: #7ec850; background: #0a2a0a; opacity: 0.65; cursor: default; }
+.match-chip.flash-wrong { animation: shake 0.3s; border-color: #e05252 !important; }
+
+/* -- Bridge (Zone 5) -- */
+.bridge-view {
+  background: #050f05; border: 2px solid #1a3a1a;
+  padding: 16px; margin-bottom: 14px; min-height: 140px;
+  position: relative; overflow: hidden;
+}
+.bridge-rope-top {
+  position: absolute; top: 20px; left: 0; right: 0; height: 2px;
+  background: repeating-linear-gradient(90deg, #8B4513 0px, #8B4513 12px, transparent 12px, transparent 16px);
+}
+.bridge-planks {
+  position: absolute; bottom: 24px; left: 0; right: 0;
+  display: flex; gap: 6px; padding: 0 10px;
+}
+.plank {
+  height: 12px; background: #6B3410; border-top: 2px solid #8B4513;
+  flex: 1; transition: background 0.3s;
+}
+.plank.crossed { background: #1a5a1a; border-top-color: #4caf50; }
+.plank.broken { background: #5a1a1a; border-top-color: #e05252; }
+#bridge-char {
+  position: absolute; bottom: 36px;
+  font-size: 26px; transition: left 0.6s ease;
+}
+.norm-card {
+  background: #050f05; border: 2px solid #2d5a2d;
+  padding: 12px 14px; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.norm-text { flex: 1; font-size: 9px; color: #c8e6c9; line-height: 1.7; }
+.norm-num { font-size: 7px; color: #4a8a4a; margin-bottom: 4px; }
+.norm-btns { display: flex; gap: 8px; }
+
+/* ══════════════════════════════════════
+   BUTTONS
+══════════════════════════════════════ */
+.px-btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px; padding: 10px 18px;
+  border: 3px solid; cursor: pointer;
+  position: relative; transition: all 0.1s;
+  display: inline-block; letter-spacing: 1px;
+}
+.px-btn::after {
+  content: ''; position: absolute;
+  bottom: -5px; left: 3px; right: -3px; height: 5px;
+}
+.px-btn:hover { transform: translateY(-2px); }
+.px-btn:active { transform: translateY(2px); }
+.px-btn:active::after { height: 2px; bottom: -2px; }
+
+.btn-green { background: #1a4a1a; border-color: #7ec850; color: #c8e6c9; }
+.btn-green::after { background: #0a2a0a; }
+.btn-green:hover { background: #2a6a2a; }
+
+.btn-red { background: #3a0a0a; border-color: #e05252; color: #ffcdd2; }
+.btn-red::after { background: #2a0a0a; }
+.btn-red:hover { background: #5a1a1a; }
+
+.btn-gold { background: #3a2a00; border-color: #f5c518; color: #fff9c4; }
+.btn-gold::after { background: #2a1a00; }
+.btn-gold:hover { background: #5a4a00; }
+
+.btn-small { font-size: 7px; padding: 7px 12px; }
+
+/* ══════════════════════════════════════
+   FEEDBACK
+══════════════════════════════════════ */
+#feedback-bar {
+  padding: 10px 14px; border: 2px solid transparent;
+  font-size: 9px; line-height: 1.7; min-height: 40px;
+  margin-bottom: 12px; text-align: center;
+  transition: all 0.3s;
+}
+#feedback-bar.ok { border-color: #7ec850; color: #7ec850; background: #0a1f0a; }
+#feedback-bar.err { border-color: #e05252; color: #ef9a9a; background: #1f0a0a; }
+#feedback-bar.info { border-color: #4fc3f7; color: #b3e5fc; background: #0a1a2a; }
+
+/* ══════════════════════════════════════
+   WIN / GAMEOVER SCREEN
+══════════════════════════════════════ */
+#endscreen {
+  display: none; position: fixed; inset: 0; z-index: 30;
+  background: rgba(0,0,0,0.95);
+  flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 18px;
+}
+#endscreen.show { display: flex; }
+#end-icon { font-size: 64px; }
+#end-title { font-size: 22px; color: #f5c518; text-shadow: 3px 3px 0 #3a2a00; }
+#end-msg { font-size: 9px; color: #a5d6a7; max-width: 480px; line-height: 2; }
+#end-score { font-size: 28px; color: #7ec850; }
+
+/* ══════════════════════════════════════
+   SCORE POPUP
+══════════════════════════════════════ */
+.score-pop {
+  position: fixed; pointer-events: none; z-index: 99;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px; color: #f5c518;
+  text-shadow: 2px 2px 0 #3a2a00;
+  animation: popFloat 1.2s forwards;
+}
+
+/* ══════════════════════════════════════
+   ANIMATIONS
+══════════════════════════════════════ */
+@keyframes markerPulse {
+  0%,100% { box-shadow: 0 0 0 2px rgba(245,197,24,0.3); }
+  50%      { box-shadow: 0 0 0 6px rgba(245,197,24,0.1), 0 0 0 2px rgba(245,197,24,0.6); }
+}
+@keyframes markerRing {
+  0%   { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2); opacity: 0; }
+}
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25%      { transform: translateX(-5px); }
+  75%      { transform: translateX(5px); }
+}
+@keyframes popFloat {
+  0%   { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-70px); }
+}
+@keyframes treeWave {
+  0%,100% { transform: rotate(0deg) translateX(0); }
+  50%      { transform: rotate(1.5deg) translateX(1px); }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ HUD BAR ═══════════ -->
+<div id="hud">
+  <span class="hud-title">🌿 SELVA DEL SABER</span>
+  <span class="hud-sep">│</span>
+  <div class="hud-item">
+    <span class="hud-label">VIDAS</span>
+    <div class="hearts">
+      <span class="heart" id="h1">❤️</span>
+      <span class="heart" id="h2">❤️</span>
+      <span class="heart" id="h3">❤️</span>
+    </div>
+  </div>
+  <span class="hud-sep">│</span>
+  <div class="hud-item" style="flex:1; max-width:200px; flex-direction:column; gap:2px;">
+    <div style="display:flex;justify-content:space-between;">
+      <span class="hud-label">PROGRESO</span>
+      <span class="hud-label" id="zones-done">0/5 ZONAS</span>
+    </div>
+    <div id="xp-bg"><div id="xp-fill"></div></div>
+  </div>
+  <span class="hud-sep">│</span>
+  <div class="hud-item">
+    <span class="hud-label">PUNTOS</span>
+    <span class="hud-val" id="score-val">000</span>
+  </div>
+</div>
+
+<!-- ═══════════ JUNGLE MAP ═══════════ -->
+<div id="map-container">
+
+  <!-- SVG Jungle Background -->
+  <svg id="jungle-bg" viewBox="0 0 1200 680" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+    <!-- Sky gradient -->
+    <defs>
+      <radialGradient id="sun" cx="70%" cy="20%" r="30%">
+        <stop offset="0%" stop-color="#3a6a1a" stop-opacity="0.6"/>
+        <stop offset="100%" stop-color="#0a1a0a" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="fog1" cx="30%" cy="80%" r="40%">
+        <stop offset="0%" stop-color="#1a4a1a" stop-opacity="0.4"/>
+        <stop offset="100%" stop-color="#0a1a0a" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+
+    <!-- Base ground -->
+    <rect width="1200" height="680" fill="#0d200d"/>
+
+    <!-- Mid ground layers -->
+    <rect x="0" y="400" width="1200" height="280" fill="#0a1a0a"/>
+    <rect x="0" y="500" width="1200" height="180" fill="#081508"/>
+
+    <!-- Light overlays -->
+    <rect width="1200" height="680" fill="url(#sun)"/>
+    <rect width="1200" height="680" fill="url(#fog1)"/>
+
+    <!-- === PIXEL TREES BACK ROW === -->
+    <!-- Tree clusters - back layer (dark) -->
+    <g fill="#0a1a0a" opacity="0.9">
+      <!-- Left cluster -->
+      <polygon points="60,350 90,240 120,350"/>
+      <polygon points="50,370 80,280 110,370"/>
+      <polygon points="100,360 125,260 150,360"/>
+      <!-- Center-left -->
+      <polygon points="220,340 255,220 290,340"/>
+      <polygon points="240,360 270,250 300,360"/>
+      <!-- Center -->
+      <polygon points="450,320 490,190 530,320"/>
+      <polygon points="470,350 505,230 540,350"/>
+      <!-- Center-right -->
+      <polygon points="680,330 715,210 750,330"/>
+      <polygon points="700,355 730,240 760,355"/>
+      <!-- Right -->
+      <polygon points="900,340 935,220 970,340"/>
+      <polygon points="920,365 950,250 980,365"/>
+      <!-- Far right -->
+      <polygon points="1080,330 1115,200 1150,330"/>
+      <polygon points="1100,355 1130,240 1160,355"/>
+    </g>
+
+    <!-- === PIXEL TREES MID ROW === -->
+    <g fill="#122212" opacity="0.95">
+      <polygon points="0,420 40,300 80,420"/>
+      <polygon points="30,440 65,320 100,440"/>
+      <polygon points="140,410 175,290 210,410"/>
+      <polygon points="160,435 190,310 220,435"/>
+      <polygon points="310,400 350,270 390,400"/>
+      <polygon points="330,425 365,295 400,425"/>
+      <polygon points="520,390 560,260 600,390"/>
+      <polygon points="540,415 575,285 610,415"/>
+      <polygon points="730,400 768,272 806,400"/>
+      <polygon points="750,425 785,298 820,425"/>
+      <polygon points="950,395 990,265 1030,395"/>
+      <polygon points="970,420 1005,290 1040,420"/>
+      <polygon points="1120,405 1158,278 1196,405"/>
+    </g>
+
+    <!-- === FOREGROUND TREES === -->
+    <g fill="#1a3a1a">
+      <!-- Left side big trees -->
+      <polygon points="-20,680 30,470 80,680"/>
+      <polygon points="50,680 95,490 140,680"/>
+      <polygon points="120,680 165,510 210,680"/>
+      <!-- Tree trunks -->
+      <rect x="22" y="640" width="18" height="40" fill="#0d1a0d"/>
+      <rect x="92" y="650" width="16" height="30" fill="#0d1a0d"/>
+      <rect x="157" y="655" width="16" height="25" fill="#0d1a0d"/>
+    </g>
+
+    <g fill="#1a3a1a">
+      <!-- Right side big trees -->
+      <polygon points="1010,680 1055,480 1100,680"/>
+      <polygon points="1080,680 1120,500 1160,680"/>
+      <polygon points="1140,680 1178,510 1216,680"/>
+      <rect x="1048" y="645" width="18" height="35" fill="#0d1a0d"/>
+      <rect x="1113" y="655" width="16" height="25" fill="#0d1a0d"/>
+    </g>
+
+    <!-- === BUSHES & UNDERGROWTH === -->
+    <g fill="#183018">
+      <ellipse cx="100" cy="500" rx="55" ry="25"/>
+      <ellipse cx="200" cy="520" rx="45" ry="22"/>
+      <ellipse cx="350" cy="490" rx="60" ry="28"/>
+      <ellipse cx="500" cy="510" rx="50" ry="24"/>
+      <ellipse cx="650" cy="495" rx="55" ry="26"/>
+      <ellipse cx="800" cy="510" rx="48" ry="23"/>
+      <ellipse cx="950" cy="500" rx="58" ry="27"/>
+      <ellipse cx="1100" cy="510" rx="52" ry="25"/>
+    </g>
+
+    <!-- GROUND LAYER -->
+    <ellipse cx="600" cy="660" rx="600" ry="60" fill="#122212"/>
+
+    <!-- === DIRT PATH connecting zones === -->
+    <!-- Winding dirt path -->
+    <path d="M 180 570 Q 240 520 320 490 Q 400 460 480 440 Q 560 420 640 450 Q 720 480 800 460 Q 880 440 950 470 Q 1000 490 1040 530"
+      fill="none" stroke="#2a1a0a" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+    <path d="M 180 570 Q 240 520 320 490 Q 400 460 480 440 Q 560 420 640 450 Q 720 480 800 460 Q 880 440 950 470 Q 1000 490 1040 530"
+      fill="none" stroke="#3a2a10" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" opacity="0.5" stroke-dasharray="8 4"/>
+
+    <!-- === VINES & DETAILS === -->
+    <g stroke="#1a3a1a" stroke-width="2" fill="none" opacity="0.6">
+      <path d="M 280 0 Q 295 80 275 160 Q 255 240 270 320"/>
+      <path d="M 580 0 Q 600 90 585 180 Q 565 270 578 350"/>
+      <path d="M 880 0 Q 900 85 882 170 Q 862 255 875 340"/>
+    </g>
+    <!-- Vine leaves -->
+    <g fill="#1a4a1a" opacity="0.5">
+      <ellipse cx="278" cy="150" rx="14" ry="7" transform="rotate(-30,278,150)"/>
+      <ellipse cx="269" cy="260" rx="12" ry="6" transform="rotate(20,269,260)"/>
+      <ellipse cx="587" cy="165" rx="13" ry="7" transform="rotate(-25,587,165)"/>
+      <ellipse cx="576" cy="290" rx="11" ry="6" transform="rotate(35,576,290)"/>
+      <ellipse cx="883" cy="155" rx="14" ry="7" transform="rotate(-20,883,155)"/>
+    </g>
+
+    <!-- === FIREFLIES / LIGHT DOTS === -->
+    <g fill="#a5d6a7" opacity="0.4">
+      <circle cx="150" cy="380" r="2"/>
+      <circle cx="320" cy="350" r="1.5"/>
+      <circle cx="500" cy="370" r="2"/>
+      <circle cx="700" cy="355" r="1.5"/>
+      <circle cx="900" cy="375" r="2"/>
+      <circle cx="1050" cy="360" r="1.5"/>
+    </g>
+
+    <!-- === WATER/RIVER accent === -->
+    <path d="M 0 600 Q 150 580 250 595 Q 350 610 450 598 Q 550 585 600 600 Q 650 615 700 602 Q 800 588 900 600 Q 1000 612 1100 600 Q 1150 595 1200 598"
+      fill="#0a1a2a" stroke="#0d2a3a" stroke-width="2" opacity="0.5"/>
+  </svg>
+
+  <!-- ═══════════ ZONE MARKERS ═══════════ -->
+  <!-- Zone 1: Cueva Oscura - top left area -->
+  <div class="zone-marker" id="marker-1" style="left:18%; top:35%;" onclick="openZone(1)">
+    <div class="zone-dot" id="dot-1">🦇<div class="zone-num">1</div></div>
+    <div class="zone-label">CUEVA OSCURA</div>
+  </div>
+
+  <!-- Zone 2: Fosa Serpientes - bottom left -->
+  <div class="zone-marker" id="marker-2" style="left:34%; top:62%;" onclick="openZone(2)">
+    <div class="zone-dot locked" id="dot-2">🐍<div class="zone-num">2</div></div>
+    <div class="zone-label">FOSA SERPIENTES</div>
+  </div>
+
+  <!-- Zone 3: Aldea Perdida - center -->
+  <div class="zone-marker" id="marker-3" style="left:52%; top:48%;" onclick="openZone(3)">
+    <div class="zone-dot locked" id="dot-3">🏘️<div class="zone-num">3</div></div>
+    <div class="zone-label">ALDEA PERDIDA</div>
+  </div>
+
+  <!-- Zone 4: Templo Ruinas - top right -->
+  <div class="zone-marker" id="marker-4" style="left:70%; top:34%;" onclick="openZone(4)">
+    <div class="zone-dot locked" id="dot-4">🏛️<div class="zone-num">4</div></div>
+    <div class="zone-label">TEMPLO DE RUINAS</div>
+  </div>
+
+  <!-- Zone 5: Puente Colgante - far right -->
+  <div class="zone-marker" id="marker-5" style="left:86%; top:55%;" onclick="openZone(5)">
+    <div class="zone-dot locked" id="dot-5">🌉<div class="zone-num">5</div></div>
+    <div class="zone-label">PUENTE COLGANTE</div>
+  </div>
+
+</div><!-- end map-container -->
+
+<!-- ═══════════ MODAL ═══════════ -->
+<div id="modal-bg" onclick="closeOnBg(event)">
+  <div id="modal">
+    <div id="modal-header">
+      <span id="modal-icon">🌿</span>
+      <div>
+        <div id="modal-title">ZONA</div>
+        <div id="modal-subtitle"></div>
+      </div>
+      <button id="modal-close" onclick="closeModal()">✕ CERRAR</button>
+    </div>
+    <div id="modal-body">
+      <div id="modal-objective"></div>
+      <div id="feedback-bar"></div>
+      <div id="game-content"></div>
+      <div id="action-bar" style="margin-top:14px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ END SCREEN ═══════════ -->
+<div id="endscreen">
+  <div id="end-icon">🏆</div>
+  <div id="end-title">¡VICTORIA!</div>
+  <div id="end-msg"></div>
+  <div id="end-score"></div>
+  <button class="px-btn btn-gold" onclick="restartGame()" style="margin-top:8px;">▶ JUGAR DE NUEVO</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     GAME SCRIPT
+══════════════════════════════════════════════════════════ -->
+<script>
+// ─── STATE ───────────────────────────────────────────────
+const G = {
+  lives: 3,
+  score: 0,
+  completed: new Set(),
+  currentZone: null,
+  // zone-specific temp vars
+  filterChoices: {},
+  classifyActive: null,
+  classifyPlacements: {},
+  hierarchyActive: null,
+  hierarchyPlacements: {},
+  matchSelected: null,
+  matchMatched: new Set(),
+  bridgeIdx: 0,
+};
+
+// ─── ZONE DATA ────────────────────────────────────────────
+const ZONES = {
+  1: {
+    icon: '🦇', name: 'CUEVA OSCURA',
+    subtitle: 'Estado del Arte — Identifica fuentes útiles',
+    objective: '📌 Clasifica cada fuente: ¿Es RECIENTE (2020-2023) y RELEVANTE para el tema del sueño?\nHaz click en ✔ SIRVE o ✖ NO SIRVE para cada una, luego presiona VERIFICAR.',
+    type: 'filter',
+    sources: [
+      { id:1, year:2023, title:'Estudio sobre hábitos de sueño en estudiantes', ok:true,  reason:'Tema exacto y año reciente' },
+      { id:2, year:2021, title:'Uso del celular antes de dormir en jóvenes',    ok:true,  reason:'Relacionado y reciente' },
+      { id:3, year:2022, title:'Beneficios del ejercicio físico',                ok:false, reason:'Tema diferente al sueño' },
+      { id:4, year:2019, title:'Horas de sueño recomendadas',                   ok:true,  reason:'Importante para el tema' },
+      { id:5, year:2015, title:'Uso de redes sociales en adultos mayores',       ok:false, reason:'Año antiguo y tema no relevante' },
+      { id:6, year:2020, title:'Efectos de dormir poco en la memoria',           ok:true,  reason:'Directamente relacionado' },
+    ]
+  },
+  2: {
+    icon: '🐍', name: 'FOSA DE SERPIENTES',
+    subtitle: 'Marco de Referencia — Clasifica la información',
+    objective: '📌 Selecciona un ELEMENTO (se resaltará en amarillo), luego haz click en la CATEGORÍA donde pertenece.\nPuedes devolver un elemento haciendo click en él dentro de la caja.',
+    type: 'classify',
+    items: [
+      { id:1, text:'Dormir 7-9 horas mejora la memoria',      cat:'Teórico' },
+      { id:2, text:'Ley de salud sobre descanso laboral',      cat:'Legal' },
+      { id:3, text:'Estudiantes usan celular en la noche',     cat:'Contextual' },
+      { id:4, text:'La luz azul afecta el sueño',              cat:'Teórico' },
+      { id:5, text:'Norma escolar sobre horarios',             cat:'Legal' },
+    ],
+    categories: ['Teórico','Legal','Contextual']
+  },
+  3: {
+    icon: '🏘️', name: 'ALDEA PERDIDA',
+    subtitle: 'Marco Teórico — Jerarquiza las ideas',
+    objective: '📌 Organiza cada idea en su nivel correcto: Raíz (idea principal) → Tronco (desarrollo) → Rama (detalle).\nLo que no sea del tema, ponlo en ❌ DESCARTAR.',
+    type: 'hierarchy',
+    items: [
+      { id:1, text:'Dormir mejora la memoria',       lvl:0 },
+      { id:2, text:'Dormir mejora concentración',    lvl:1 },
+      { id:3, text:'Dormir regula emociones',        lvl:2 },
+      { id:4, text:'Tomar agua es saludable',        lvl:3 },
+    ],
+    levels: ['🌱 Raíz','🌿 Tronco','🍃 Rama','❌ Descartar']
+  },
+  4: {
+    icon: '🏛️', name: 'TEMPLO DE RUINAS',
+    subtitle: 'Marco Conceptual — Empareja conceptos',
+    objective: '📌 Click en un CONCEPTO (izquierda) y luego en su DEFINICIÓN correcta (derecha).\n¡Cada par correcto suma puntos!',
+    type: 'match',
+    pairs: [
+      { concept:'Sueño',              def:'Estado de descanso del cuerpo y la mente' },
+      { concept:'Insomnio',           def:'Dificultad persistente para conciliar el sueño' },
+      { concept:'Melatonina',         def:'Hormona que regula los ciclos de sueño' },
+      { concept:'Privación del sueño',def:'Dormir menos horas de las necesarias' },
+    ]
+  },
+  5: {
+    icon: '🌉', name: 'PUENTE COLGANTE',
+    subtitle: 'Marco Legal — Valida las normas',
+    objective: '📌 Para cada norma decide si APLICA al tema del sueño o NO APLICA.\n¡Si fallas pierdes el equilibrio y una vida!',
+    type: 'bridge',
+    norms: [
+      { text:'Se recomienda dormir entre 7 y 9 horas diarias',         aplica:true  },
+      { text:'Uso obligatorio de uniforme escolar en instituciones',    aplica:false },
+      { text:'Evitar el uso de pantallas 1 hora antes de dormir',      aplica:true  },
+      { text:'Está prohibido comer alimentos en el salón de clases',   aplica:false },
+    ]
+  }
+};
+
+// ─── OPEN / CLOSE MODAL ───────────────────────────────────
+function openZone(id) {
+  const dot = document.getElementById('dot-' + id);
+  if (dot.classList.contains('locked')) {
+    showFeedback('🔒 Completa la zona anterior primero', 'info');
+    setTimeout(()=>hideFeedback(), 2000);
+    return;
+  }
+  G.currentZone = id;
+  const z = ZONES[id];
+  document.getElementById('modal-icon').textContent = z.icon;
+  document.getElementById('modal-title').textContent = z.name;
+  document.getElementById('modal-subtitle').textContent = z.subtitle;
+  document.getElementById('modal-objective').innerHTML = z.objective.replace(/\n/g,'<br>');
+  document.getElementById('feedback-bar').className = '';
+  document.getElementById('feedback-bar').textContent = '';
+  renderZone(id);
+  document.getElementById('modal-bg').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-bg').classList.remove('open');
+  G.currentZone = null;
+}
+
+function closeOnBg(e) {
+  if (e.target === document.getElementById('modal-bg')) closeModal();
+}
+
+// ─── ZONE RENDERERS ───────────────────────────────────────
+function renderZone(id) {
+  const z = ZONES[id];
+  if (z.type === 'filter')    renderFilter(z);
+  if (z.type === 'classify')  renderClassify(z);
+  if (z.type === 'hierarchy') renderHierarchy(z);
+  if (z.type === 'match')     renderMatch(z);
+  if (z.type === 'bridge')    renderBridge(z);
+}
+
+/* ── ZONE 1: FILTER ── */
+function renderFilter(z) {
+  G.filterChoices = {};
+  let html = '<div class="source-grid">';
+  z.sources.forEach(s => {
+    html += `
+      <div class="src-card" id="sc${s.id}">
+        <div class="src-year">📅 ${s.year}</div>
+        <div class="src-title">${s.title}</div>
+        <div class="src-btns">
+          <button class="src-btn yes-btn" id="sy${s.id}" onclick="pickSrc(${s.id},'yes')">✔ SIRVE</button>
+          <button class="src-btn no-btn"  id="sn${s.id}" onclick="pickSrc(${s.id},'no')">✖ NO</button>
+        </div>
+      </div>`;
+  });
+  html += '</div>';
+  document.getElementById('game-content').innerHTML = html;
+  document.getElementById('action-bar').innerHTML =
+    '<button class="px-btn btn-gold" onclick="checkFilter()">▶ VERIFICAR RESPUESTAS</button>';
+}
+
+function pickSrc(id, choice) {
+  G.filterChoices[id] = choice;
+  const card = document.getElementById('sc' + id);
+  card.className = 'src-card';
+  ['sy','sn'].forEach(p => document.getElementById(p+id).classList.remove('active'));
+  document.getElementById((choice === 'yes' ? 'sy' : 'sn') + id).classList.add('active');
+}
+
+function checkFilter() {
+  const z = ZONES[1];
+  let correct = 0;
+  z.sources.forEach(s => {
+    const expected = s.ok ? 'yes' : 'no';
+    const card = document.getElementById('sc' + s.id);
+    if (G.filterChoices[s.id] === expected) {
+      correct++;
+      card.className = 'src-card correct-card';
+    } else {
+      card.className = 'src-card wrong-card';
+    }
+  });
+  if (correct === z.sources.length) {
+    showFeedback(`✅ ¡Perfecto! ${correct}/${z.sources.length} correctas. ¡Fuentes bien identificadas!`, 'ok');
+    addScore(100);
+    setTimeout(() => { completeZone(1); closeModal(); }, 1800);
+  } else if (correct >= z.sources.length - 1) {
+    showFeedback(`⚠️ Casi... ${correct}/${z.sources.length} correctas. Recuerda: reciente=2020+ y tema=sueño`, 'err');
+    loseLife(); setTimeout(() => { G.filterChoices={}; renderZone(1); }, 2000);
+  } else {
+    showFeedback(`❌ ${correct}/${z.sources.length} correctas. Tip: ${z.sources[0].year >= 2020 ? 'año 2020+ = reciente' : ''}`, 'err');
+    loseLife(); setTimeout(() => { G.filterChoices={}; renderZone(1); }, 2000);
+  }
+}
+
+/* ── ZONE 2: CLASSIFY ── */
+function renderClassify(z) {
+  G.classifyActive = null; G.classifyPlacements = {};
+  let items = z.items.map(i =>
+    `<div class="drag-item" id="ci${i.id}" onclick="selectClassItem(${i.id})">${i.text}</div>`
+  ).join('');
+  let cats = z.categories.map(c =>
+    `<div class="cat-box" id="cb${c}" onclick="placeInCat('${c}')">
+      <h4>${c}</h4><div id="ct${c}"></div>
+    </div>`
+  ).join('');
+  document.getElementById('game-content').innerHTML =
+    `<div class="items-row">${items}</div><div class="cats-row">${cats}</div>`;
+  document.getElementById('action-bar').innerHTML =
+    '<button class="px-btn btn-gold" onclick="checkClassify()">▶ VERIFICAR</button>';
+}
+
+function selectClassItem(id) {
+  if (document.getElementById('ci'+id)?.classList.contains('placed')) return;
+  document.querySelectorAll('.drag-item').forEach(el => el.classList.remove('selected'));
+  document.getElementById('ci'+id)?.classList.add('selected');
+  G.classifyActive = id;
+}
+
+function placeInCat(cat) {
+  if (!G.classifyActive) { showFeedback('⬆ Primero selecciona un elemento de arriba','info'); return; }
+  const z = ZONES[2];
+  const item = z.items.find(i => i.id === G.classifyActive);
+  G.classifyPlacements[G.classifyActive] = cat;
+  const el = document.getElementById('ci' + G.classifyActive);
+  el.classList.add('placed'); el.classList.remove('selected');
+  const tag = document.createElement('div');
+  tag.className = 'cat-tag'; tag.textContent = item.text;
+  const captured = G.classifyActive;
+  tag.onclick = () => returnClassItem(captured, cat, tag);
+  document.getElementById('ct' + cat)?.appendChild(tag);
+  G.classifyActive = null;
+}
+
+function returnClassItem(id, cat, tag) {
+  delete G.classifyPlacements[id];
+  tag.remove();
+  document.getElementById('ci'+id)?.classList.remove('placed');
+}
+
+function checkClassify() {
+  const z = ZONES[2];
+  let ok = 0;
+  z.items.forEach(i => { if (G.classifyPlacements[i.id] === i.cat) ok++; });
+  if (ok === z.items.length) {
+    showFeedback('✅ ¡Clasificación perfecta! +120 pts', 'ok');
+    addScore(120); setTimeout(() => { completeZone(2); closeModal(); }, 1800);
+  } else {
+    showFeedback(`❌ ${ok}/${z.items.length} correctos. Teórico=conocimiento, Legal=norma/ley, Contextual=situación real`, 'err');
+    loseLife();
+  }
+}
+
+/* ── ZONE 3: HIERARCHY ── */
+function renderHierarchy(z) {
+  G.hierarchyActive = null; G.hierarchyPlacements = {};
+  let items = z.items.map(i =>
+    `<div class="drag-item" id="hi${i.id}" onclick="selectHierItem(${i.id})">${i.text}</div>`
+  ).join('');
+  let lvls = z.levels.map((l, idx) =>
+    `<div class="cat-box" id="hl${idx}" onclick="placeInLevel(${idx})">
+      <h4>${l}</h4><div id="hlt${idx}"></div>
+    </div>`
+  ).join('');
+  document.getElementById('game-content').innerHTML =
+    `<div class="items-row">${items}</div><div class="cats-row">${lvls}</div>`;
+  document.getElementById('action-bar').innerHTML =
+    '<button class="px-btn btn-gold" onclick="checkHierarchy()">▶ VERIFICAR</button>';
+}
+
+function selectHierItem(id) {
+  if (document.getElementById('hi'+id)?.classList.contains('placed')) return;
+  document.querySelectorAll('.drag-item').forEach(el => el.classList.remove('selected'));
+  document.getElementById('hi'+id)?.classList.add('selected');
+  G.hierarchyActive = id;
+}
+
+function placeInLevel(idx) {
+  if (G.hierarchyActive === null) { showFeedback('⬆ Primero selecciona una idea de arriba','info'); return; }
+  const z = ZONES[3];
+  const item = z.items.find(i => i.id === G.hierarchyActive);
+  G.hierarchyPlacements[G.hierarchyActive] = idx;
+  const el = document.getElementById('hi' + G.hierarchyActive);
+  el.classList.add('placed'); el.classList.remove('selected');
+  const tag = document.createElement('div');
+  tag.className = 'cat-tag'; tag.textContent = item.text;
+  const captured = G.hierarchyActive;
+  tag.onclick = () => returnHierItem(captured, idx, tag);
+  document.getElementById('hlt' + idx)?.appendChild(tag);
+  G.hierarchyActive = null;
+}
+
+function returnHierItem(id, idx, tag) {
+  delete G.hierarchyPlacements[id];
+  tag.remove();
+  document.getElementById('hi'+id)?.classList.remove('placed');
+}
+
+function checkHierarchy() {
+  const z = ZONES[3];
+  let ok = 0;
+  z.items.forEach(i => { if (G.hierarchyPlacements[i.id] === i.lvl) ok++; });
+  if (ok === z.items.length) {
+    showFeedback('✅ ¡Árbol del conocimiento perfecto! +120 pts', 'ok');
+    addScore(120); setTimeout(() => { completeZone(3); closeModal(); }, 1800);
+  } else {
+    showFeedback(`❌ ${ok}/${z.items.length} correctos. Raíz=idea principal del tema sueño`, 'err');
+    loseLife();
+  }
+}
+
+/* ── ZONE 4: MATCH ── */
+function renderMatch(z) {
+  G.matchSelected = null; G.matchMatched = new Set();
+  const defs = [...z.pairs.map(p => p.def)].sort(() => Math.random() - 0.5);
+  let concepts = z.pairs.map(p =>
+    `<div class="match-chip" id="mc${p.concept.replace(/ /g,'_')}" onclick="selectConcept('${p.concept}')">${p.concept}</div>`
+  ).join('');
+  let defCols = defs.map((d, i) =>
+    `<div class="match-chip" id="md${i}" data-def="${d}" onclick="selectDef('${d}',${i})">${d}</div>`
+  ).join('');
+  document.getElementById('game-content').innerHTML = `
+    <div class="match-cols">
+      <div><div class="match-col-title">🔑 CONCEPTOS</div>${concepts}</div>
+      <div><div class="match-col-title">📖 DEFINICIONES</div>${defCols}</div>
+    </div>`;
+  document.getElementById('action-bar').innerHTML = '';
+}
+
+function selectConcept(c) {
+  if (G.matchMatched.has(c)) return;
+  document.querySelectorAll('.match-chip').forEach(el => el.classList.remove('selected'));
+  document.getElementById('mc'+c.replace(/ /g,'_'))?.classList.add('selected');
+  G.matchSelected = { type:'concept', val:c };
+  tryMatch();
+}
+
+function selectDef(d, i) {
+  if ([...G.matchMatched].some(mc => ZONES[4].pairs.find(p=>p.concept===mc)?.def===d)) return;
+  document.querySelectorAll('[id^="md"]').forEach(el => el.classList.remove('selected'));
+  document.getElementById('md'+i)?.classList.add('selected');
+  if (G.matchSelected?.type === 'concept') {
+    G.matchSelected = { type:'pair', concept: G.matchSelected.val, def:d, defIdx:i };
+    tryMatch();
+  } else {
+    G.matchSelected = { type:'def', val:d, idx:i };
+  }
+}
+
+function tryMatch() {
+  if (!G.matchSelected || G.matchSelected.type !== 'pair') return;
+  const { concept, def, defIdx } = G.matchSelected;
+  G.matchSelected = null;
+  const pair = ZONES[4].pairs.find(p => p.concept === concept);
+  if (pair && pair.def === def) {
+    document.getElementById('mc'+concept.replace(/ /g,'_'))?.classList.replace('selected','matched');
+    document.getElementById('md'+defIdx)?.classList.replace('selected','matched');
+    G.matchMatched.add(concept);
+    addScore(35);
+    showFeedback(`✅ ¡Correcto! "${concept}" → "${def}"`, 'ok');
+    if (G.matchMatched.size === ZONES[4].pairs.length) {
+      setTimeout(() => { completeZone(4); closeModal(); }, 1200);
+    }
+  } else {
+    const cEl = document.getElementById('mc'+concept.replace(/ /g,'_'));
+    const dEl = document.getElementById('md'+defIdx);
+    cEl?.classList.add('flash-wrong'); dEl?.classList.add('flash-wrong');
+    setTimeout(() => { cEl?.classList.remove('flash-wrong','selected'); dEl?.classList.remove('flash-wrong','selected'); }, 400);
+    showFeedback('❌ Esa no es la definición correcta. Intenta de nuevo.', 'err');
+    loseLife();
+  }
+}
+
+/* ── ZONE 5: BRIDGE ── */
+function renderBridge(z) {
+  G.bridgeIdx = 0;
+  const planks = z.norms.map(() => `<div class="plank"></div>`).join('');
+  document.getElementById('game-content').innerHTML = `
+    <div class="bridge-view">
+      <div class="bridge-rope-top"></div>
+      <div class="bridge-planks" id="bp">${planks}</div>
+      <div id="bridge-char" style="left:5%;">🚶</div>
+    </div>
+    <div id="norm-area"></div>`;
+  document.getElementById('action-bar').innerHTML = '';
+  showNorm();
+}
+
+function showNorm() {
+  const z = ZONES[5];
+  if (G.bridgeIdx >= z.norms.length) { completeZone(5); closeModal(); return; }
+  const n = z.norms[G.bridgeIdx];
+  document.getElementById('norm-area').innerHTML = `
+    <div class="norm-card">
+      <div>
+        <div class="norm-num">NORMA ${G.bridgeIdx+1} de ${z.norms.length}</div>
+        <div class="norm-text">"${n.text}"</div>
+      </div>
+      <div class="norm-btns">
+        <button class="px-btn btn-green btn-small" onclick="answerBridge(true)">✔ APLICA</button>
+        <button class="px-btn btn-red btn-small" onclick="answerBridge(false)">✖ NO APLICA</button>
+      </div>
+    </div>`;
+}
+
+function answerBridge(choice) {
+  const z = ZONES[5];
+  const n = z.norms[G.bridgeIdx];
+  const plank = document.querySelectorAll('.plank')[G.bridgeIdx];
+  if (choice === n.aplica) {
+    if (plank) plank.classList.add('crossed');
+    addScore(40);
+    const pct = ((G.bridgeIdx + 1) / z.norms.length * 80 + 5);
+    const ch = document.getElementById('bridge-char');
+    if (ch) ch.style.left = pct + '%';
+    showFeedback('✅ ¡Correcto! Avanzas por el puente.', 'ok');
+  } else {
+    if (plank) plank.classList.add('broken');
+    showFeedback('❌ ¡Tablón roto! Esa norma no aplica al tema.', 'err');
+    loseLife();
+  }
+  G.bridgeIdx++;
+  setTimeout(showNorm, 1100);
+}
+
+// ─── GAME LOGIC ───────────────────────────────────────────
+function completeZone(id) {
+  if (G.completed.has(id)) return;
+  G.completed.add(id);
+  const dot = document.getElementById('dot-' + id);
+  dot.classList.remove('locked');
+  dot.classList.add('completed');
+  // Unlock next
+  if (id < 5) {
+    const next = document.getElementById('dot-' + (id+1));
+    next?.classList.remove('locked');
+  }
+  // Update HUD
+  document.getElementById('zones-done').textContent = G.completed.size + '/5 ZONAS';
+  document.getElementById('xp-fill').style.width = (G.completed.size * 20) + '%';
+  showScorePop('+ZONA COMPLETADA!');
+  if (G.completed.size === 5) setTimeout(showWin, 500);
+}
+
+function addScore(pts) {
+  G.score += pts;
+  document.getElementById('score-val').textContent = String(G.score).padStart(3,'0');
+  showScorePop('+' + pts);
+}
+
+function loseLife() {
+  if (G.lives <= 0) return;
+  G.lives--;
+  const hearts = ['h1','h2','h3'];
+  document.getElementById(hearts[G.lives])?.classList.add('dead');
+  if (G.lives === 0) setTimeout(showGameOver, 800);
+}
+
+function showFeedback(msg, type) {
+  const el = document.getElementById('feedback-bar');
+  el.textContent = msg; el.className = type || '';
+}
+
+function hideFeedback() {
+  const el = document.getElementById('feedback-bar');
+  el.textContent = ''; el.className = '';
+}
+
+function showScorePop(text) {
+  const el = document.createElement('div');
+  el.className = 'score-pop';
+  el.textContent = text;
+  el.style.left = (Math.random() * 60 + 20) + '%';
+  el.style.top = '50%';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1300);
+}
+
+function showWin() {
+  closeModal();
+  const es = document.getElementById('endscreen');
+  document.getElementById('end-icon').textContent = '🏆';
+  document.getElementById('end-title').textContent = '¡SELVA CONQUISTADA!';
+  document.getElementById('end-msg').textContent =
+    '¡Completaste las 5 zonas de la Selva del Saber!\nYa conoces cómo construir el Marco Teórico sobre hábitos del sueño.';
+  document.getElementById('end-score').textContent = '★ ' + G.score + ' PUNTOS ★';
+  es.classList.add('show');
+}
+
+function showGameOver() {
+  closeModal();
+  document.getElementById('end-icon').textContent = '💀';
+  document.getElementById('end-title').textContent = 'GAME OVER';
+  document.getElementById('end-msg').textContent =
+    'Te quedaste sin vidas en la Selva.\n¡Recuerda las lecciones e inténtalo de nuevo!';
+  document.getElementById('end-score').textContent = G.score + ' puntos';
+  document.getElementById('endscreen').classList.add('show');
+}
+
+function restartGame() {
+  G.lives = 3; G.score = 0; G.completed = new Set(); G.currentZone = null;
+  ['h1','h2','h3'].forEach(id => document.getElementById(id)?.classList.remove('dead'));
+  document.getElementById('score-val').textContent = '000';
+  document.getElementById('xp-fill').style.width = '0%';
+  document.getElementById('zones-done').textContent = '0/5 ZONAS';
+  for (let i = 1; i <= 5; i++) {
+    const dot = document.getElementById('dot-' + i);
+    dot.classList.remove('completed');
+    if (i > 1) dot.classList.add('locked');
+  }
+  document.getElementById('endscreen').classList.remove('show');
+}
+</script>
+</body>
+</html>
